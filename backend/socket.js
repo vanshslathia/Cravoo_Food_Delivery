@@ -1,0 +1,63 @@
+import User from "./models/user.model.js"
+
+export const socketHandler = (io) => {
+  io.on('connection', (socket) => {
+    console.log("socket connected:", socket.id)
+    const handleRegister = async ({ userId }) => {
+      try {
+        if (!userId) return
+        const user = await User.findByIdAndUpdate(userId, {
+          socketId: socket.id, isOnline: true
+        }, { new: true })
+        console.log("socket registered:", { userId, socketId: socket.id, updated: Boolean(user) })
+      } catch (error) {
+        console.log("register socket error:", error)
+      }
+    }
+    socket.on('register', handleRegister)
+    socket.on('identity', handleRegister)
+
+
+    socket.on('updateLocation', async ({ latitude, longitude, userId }) => {
+      try {
+        const user = await User.findByIdAndUpdate(userId, {
+          location: {
+            type: 'Point',
+            coordinates: [longitude, latitude]
+          },
+          isOnline: true,
+          socketId: socket.id
+        })
+
+        if (user) {
+          io.emit('updateDeliveryLocation',{
+            deliveryBoyId:userId,
+            latitude,
+            longitude
+          })
+        }
+
+
+      } catch (error) {
+          console.log('updateDeliveryLocation error')
+      }
+    })
+
+
+
+
+    socket.on('disconnect', async () => {
+      try {
+        console.log("socket disconnected:", socket.id)
+
+        await User.findOneAndUpdate({ socketId: socket.id }, {
+          socketId: null,
+          isOnline: false
+        })
+      } catch (error) {
+        console.log(error)
+      }
+
+    })
+  })
+}
